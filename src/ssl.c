@@ -87,7 +87,7 @@ int fips_available() { /* either FIPS provider or container is available */
 }
 
 int ssl_init(void) { /* init TLS before parsing configuration file */
-#if OPENSSL_VERSION_NUMBER>=0x10100000L
+#if OPENSSL_VERSION_NUMBER>=0x10100000L && !defined(WITH_WOLFSSL)
     OPENSSL_INIT_SETTINGS *conf=OPENSSL_INIT_new();
 #ifdef USE_WIN32
     OPENSSL_INIT_set_config_filename(conf, "..\\config\\openssl.cnf");
@@ -97,8 +97,8 @@ int ssl_init(void) { /* init TLS before parsing configuration file */
     OPENSSL_INIT_free(conf);
 #else
     OPENSSL_config(NULL);
-    SSL_load_error_strings();
     SSL_library_init();
+    SSL_load_error_strings();
 #endif
     index_ssl_cli=SSL_get_ex_new_index(0,
         "CLI pointer", NULL, NULL, NULL);
@@ -351,6 +351,7 @@ NOEXPORT int compression_configure(GLOBAL_OPTIONS *global) {
 NOEXPORT int prng_init(GLOBAL_OPTIONS *global) {
     int totbytes=0;
     char filename[256];
+#ifndef WITH_WOLFSSL
     const RAND_METHOD *meth=RAND_get_rand_method();
 
     /* skip PRNG initialization when no seeding methods are available */
@@ -358,6 +359,7 @@ NOEXPORT int prng_init(GLOBAL_OPTIONS *global) {
         s_log(LOG_DEBUG, "No PRNG seeding methods");
         return 0; /* success */
     }
+#endif
 
     if(RAND_status()) {
         s_log(LOG_DEBUG, "No PRNG seeding was required");

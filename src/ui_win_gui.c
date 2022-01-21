@@ -92,8 +92,10 @@ NOEXPORT void peer_menu_update(void);
 NOEXPORT void peer_menu_update_unlocked(void);
 NOEXPORT void peer_cert_save(WPARAM wParam);
 
+#ifndef WITH_WOLFSSL
 /* UI callbacks */
 NOEXPORT int pin_cb(UI *, UI_STRING *);
+#endif
 
 /* log handling */
 NOEXPORT void log_save(void);
@@ -1181,7 +1183,7 @@ int ui_passwd_cb(char *buf, int size, int rwflag, void *userdata) {
     return len;
 }
 
-#ifndef OPENSSL_NO_ENGINE
+#if !defined(OPENSSL_NO_ENGINE) && !defined(WITH_WOLFSSL)
 
 NOEXPORT int pin_cb(UI *ui, UI_STRING *uis) {
     if(!DialogBox(ghInst, TEXT("PassBox"), hwnd, (DLGPROC)pass_proc))

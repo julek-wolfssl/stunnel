@@ -48,7 +48,9 @@
 #pragma GCC diagnostic ignored "-Wpedantic"
 #endif /* __GNUC__ */
 
+#ifndef WITH_WOLFSSL
 #include <openssl/applink.c>
+#endif
 
 #ifdef __GNUC__
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
@@ -123,10 +125,16 @@ void main_init() { /* one-time initialization */
 #endif
     /* basic initialization contains essential functions required for logging
      * subsystem to function properly, thus all errors here are fatal */
+#ifndef WITH_WOLFSSL
     if(ssl_init()) /* initialize TLS library */
         fatal("TLS initialization failed");
+#endif
     if(sthreads_init()) /* initialize critical sections & TLS callbacks */
         fatal("Threads initialization failed");
+#ifdef WITH_WOLFSSL
+    if(ssl_init()) /* initialize TLS library */
+        fatal("TLS initialization failed");
+#endif
     options_defaults(); /* initialize defaults */
     options_apply(); /* apply the defaults */
 #ifndef USE_FORK

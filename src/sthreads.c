@@ -122,6 +122,8 @@ void thread_id_init(void) {
 /* we only need to initialize locking with OpenSSL older than 1.1.0 */
 #if OPENSSL_VERSION_NUMBER<0x10100004L
 
+#ifndef WITH_WOLFSSL
+
 #ifdef USE_PTHREAD
 
 NOEXPORT void s_lock_init_debug(struct CRYPTO_dynlock_value *lock,
@@ -256,6 +258,8 @@ NOEXPORT void s_lock_destroy_debug(struct CRYPTO_dynlock_value *lock,
 
 #endif /* USE_WIN32 */
 
+#endif /* WITH_WOLFSSL */
+
 NOEXPORT int s_atomic_add(int *val, int amount, CRYPTO_RWLOCK *lock) {
     int ret;
 
@@ -280,6 +284,8 @@ NOEXPORT int s_atomic_add(int *val, int amount, CRYPTO_RWLOCK *lock) {
 CRYPTO_RWLOCK *stunnel_locks[STUNNEL_LOCKS];
 
 #if OPENSSL_VERSION_NUMBER<0x10100004L
+
+#ifndef WITH_WOLFSSL
 
 #ifdef USE_OS_THREADS
 
@@ -378,6 +384,8 @@ void CRYPTO_THREAD_lock_free(CRYPTO_RWLOCK *lock) {
 
 #endif /* USE_OS_THREADS */
 
+#endif /* WITH_WOLFSSL */
+
 int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock) {
     *ret=s_atomic_add(val, amount, lock);
     return 1;
@@ -387,7 +395,7 @@ int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock) {
 
 void locking_init(void) {
     size_t i;
-#if defined(USE_OS_THREADS) && OPENSSL_VERSION_NUMBER<0x10100004L
+#if defined(USE_OS_THREADS) && OPENSSL_VERSION_NUMBER<0x10100004L && !defined(WITH_WOLFSSL)
     size_t num;
 
     /* initialize the OpenSSL static locking */

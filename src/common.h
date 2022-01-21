@@ -47,15 +47,22 @@
 #define LIBWRAP_CLIENTS 5
 
 /* CPU stack size */
-#define DEFAULT_STACK_SIZE 65536
+#ifdef WITH_WOLFSSL
+    /* Default option for wolfssl is Tom's fastmath with timing resistance
+     * which providers far greater security. This can be reduced to
+     * 65536 if not using TFM timing resistance. */
+    #define DEFAULT_STACK_SIZE 131072
+#else
+    #define DEFAULT_STACK_SIZE 65536
+#endif
 /* #define DEBUG_STACK_SIZE */
 
 /* I/O buffer size: 18432 (0x4800) is the maximum size of TLS record payload */
 #define BUFFSIZE 18432
 
 /* how many bytes of random input to read from files for PRNG */
-/* security margin is huge to compensate for flawed entropy */
-#define RANDOM_BYTES 1024
+/* OpenSSL likes at least 128 bits, so 64 bytes seems plenty. */
+#define RANDOM_BYTES 64
 
 /**************************************** debugging */
 
@@ -411,6 +418,20 @@ extern char *sys_errlist[];
 #define S_ISREG(m) (((m)&S_IFMT)==S_IFREG)
 #endif
 
+/**************************************** wolfSSL headers */
+#ifdef WITH_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/openssl/ssl.h>
+#include <wolfssl/wolfcrypt/wc_port.h>
+#include <wolfssl/wolfcrypt/coding.h>
+#ifdef WOLFSSL_DEBUG_ON
+#include <wolfssl/wolfcrypt/logging.h>
+#endif /* WOLFSSL_DEBUG_ON */
+#include <wolfssl/wolfcrypt/dh.h>
+#include <wolfssl/wolfcrypt/error-crypt.h>
+#include <wolfssl/openssl/ec.h>
+#endif /* defined(WITH_WOLFSSL) */
+
 /**************************************** OpenSSL headers */
 
 /* TODO: remove this after migrating to the OpenSSL 3.0 API */
@@ -466,6 +487,53 @@ extern char *sys_errlist[];
 #if OPENSSL_VERSION_NUMBER<0x10101000L
 #define OPENSSL_NO_TLS1_3
 #endif /* OpenSSL older than 1.1.1 */
+
+/* WOLFSSL_SPECIFIC ifdefs */
+#ifdef WITH_WOLFSSL
+
+#if defined(WOLFSSL_TLS13) && defined(OPENSSL_NO_TLS1_3)
+#undef OPENSSL_NO_TLS1_3
+#endif
+
+#ifndef WOLFSSL_ALLOW_SSLV3
+#ifndef OPENSSL_NO_SSL3
+#define OPENSSL_NO_SSL3
+#endif /* !defined(OPENSSL_NO_SSL3) */
+#endif /*WOLFSSL_ALLOW_SSLv3 */
+
+#ifndef OPENSSL_NO_ENGINE
+#define OPENSSL_NO_ENGINE
+#endif /* OPENSSL_NO_ENGINE */
+
+#ifndef OPENSSL_NO_COMP
+#define OPENSSL_NO_COMP
+#endif /* OPENSSL_NO_COMP */
+
+#ifndef OPENSSL_NO_SSL2
+#define OPENSSL_NO_SSL2
+#endif /* !defined(OPENSSL_NO_SSL2) */
+
+#ifndef CRYPTO_w_lock
+#define CRYPTO_w_lock CRYPTO_THREAD_lock
+#endif /* CRYPTO_w_lock */
+
+#ifndef CRYPTO_w_unlock
+#define CRYPTO_w_unlock CRYPTO_THREAD_unlock
+#endif /* CRYPTO_w_lock */
+
+#if defined(NO_OLD_TLS) || !defined(WOLFSSL_ALLOW_TLSV10)
+#define OPENSSL_NO_TLS1
+#endif
+
+#ifdef NO_OLD_TLS
+#define OPENSSL_NO_TLS1_1
+#endif
+
+#ifdef WOLFSSL_NO_TLS12
+#define OPENSSL_NO_TLS1_2
+#endif
+
+#endif /* defined (WITH_WOLFSSL) */
 
 #ifdef USE_WIN32
 #define USE_FIPS

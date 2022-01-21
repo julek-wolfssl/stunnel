@@ -30,12 +30,20 @@ CLEANFILES = stunnel3
 stunnel_CPPFLAGS = -I$(SYSROOT)/usr/kerberos/include
 
 # Additional preprocessor definitions
+if WOLFSSL
+stunnel_CPPFLAGS += -I$(SSLDIR)/include/wolfssl -I$(SSLDIR)/include
+else
 stunnel_CPPFLAGS += -I$(SSLDIR)/include
+endif
 stunnel_CPPFLAGS += -DLIBDIR='"$(pkglibdir)"'
 stunnel_CPPFLAGS += -DCONFDIR='"$(sysconfdir)/stunnel"'
 
 # TLS library
+if WOLFSSL
+stunnel_LDFLAGS = -L$(SSLDIR)/lib64 -L$(SSLDIR)/lib -lwolfssl
+else
 stunnel_LDFLAGS = -L$(SSLDIR)/lib64 -L$(SSLDIR)/lib -lssl -lcrypto
+endif
 
 # stunnel3 script
 edit = sed \
@@ -53,8 +61,13 @@ libstunnel_la_LDFLAGS = -avoid-version
 # Win32 executables                                                           #
 ###############################################################################
 
+if WOLFSSL
+mingw:
+	$(MAKE) -f $(srcdir)/mingw_wolfssl.mk srcdir=$(srcdir) win32_arch=win32 win32_targetcpu=i686 win32_mingw=mingw
+else
 mingw:
 	$(MAKE) -f $(srcdir)/mingw.mk srcdir=$(srcdir) win32_arch=win32 win32_targetcpu=i686 win32_mingw=mingw
+endif
 
 mingw64:
 	$(MAKE) -f $(srcdir)/mingw.mk srcdir=$(srcdir) win32_arch=win64 win32_targetcpu=x86_64 win32_mingw=mingw64

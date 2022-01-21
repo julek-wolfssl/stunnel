@@ -83,6 +83,7 @@ class FailureVerifyCRL(StunnelTest):
         self.params.context = 'load_revoked_cert'
         self.events.count = 1
         self.events.success = [
+            "CRL Cert revoked",
             "certificate verify failed"
         ]
         self.events.failure = [

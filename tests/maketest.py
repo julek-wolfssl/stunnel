@@ -52,8 +52,8 @@ RE_STUNNEL_VERSION = re.compile(
 
 RE_OPENSSL_VERSION = re.compile(
     r""" ^
-    Compiled\/running\swith\sOpenSSL\s+
-    (?P<version> (?: [0-3]\.[0-9]\.[0-9]* ) \S+)
+    Compiled\/running\swith\s((OpenSSL)|(wolfSSL))\s+
+    (?P<version> (?: [0-5]\.[0-9]\.[0-9]* ) \S+)
     (?: \s .* )?
     $ """,
     re.X

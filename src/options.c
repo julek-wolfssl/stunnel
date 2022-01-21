@@ -321,12 +321,23 @@ static SERVICE_OPTIONS new_service_options;
 static char *option_not_found=
     "Specified option name is not valid here";
 
+#ifdef WITH_WOLFSSL
+/* Since wolfSSL doesn't support the same naming for cipher strings, we
+ * default to NULL and require the user to specify exact cipher_strings
+ * if they want to limit the cipher list */
+static char *stunnel_cipher_list="DEFAULT";
+#else
 static char *stunnel_cipher_list=
-    "HIGH:!aNULL:!SSLv2:!DH:!kDHEPSK";
+    "HIGH:!DH:!aNULL:!SSLv2";
+#endif /* WITH_WOLFSSL */
 
 #ifndef OPENSSL_NO_TLS1_3
+#ifdef WITH_WOLFSSL
+static char *stunnel_ciphersuites=NULL;
+#else
 static char *stunnel_ciphersuites=
     "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256";
+#endif
 #endif /* TLS 1.3 */
 
 /**************************************** parse commandline parameters */
@@ -1517,7 +1528,7 @@ NOEXPORT char *parse_service_option(CMD cmd, SERVICE_OPTIONS **section_ptr,
         break;
     }
 
-#if OPENSSL_VERSION_NUMBER>=0x10002000L
+#if OPENSSL_VERSION_NUMBER>=0x10002000L || defined(WITH_WOLFSSL)
 
     /* checkEmail */
     switch(cmd) {
@@ -1678,7 +1689,11 @@ NOEXPORT char *parse_service_option(CMD cmd, SERVICE_OPTIONS **section_ptr,
         }
         break;
     case CMD_PRINT_DEFAULTS:
+    #ifdef WITH_WOLFSSL
+        s_log(LOG_NOTICE, "wolfSSL will choose the most secure cipher supported by both client and server");
+    #else
         s_log(LOG_NOTICE, "%-22s = %s %s", "ciphersuites", stunnel_ciphersuites, "(with TLSv1.3)");
+    #endif
         break;
     case CMD_PRINT_HELP:
         s_log(LOG_NOTICE, "%-22s = permitted ciphersuites for TLS 1.3", "ciphersuites");
@@ -3798,7 +3813,9 @@ NOEXPORT char *parse_service_option(CMD cmd, SERVICE_OPTIONS **section_ptr,
     case CMD_FREE:
         str_free(section->chain);
         if(section->session)
+        #ifndef WITH_WOLFSSL
             SSL_SESSION_free(section->session);
+        #endif
         if(section->ctx)
             SSL_CTX_free(section->ctx);
         str_free(section->servname);

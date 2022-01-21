@@ -43,30 +43,34 @@
 /* verify initialization */
 NOEXPORT void set_client_CA_list(SERVICE_OPTIONS *section);
 NOEXPORT void auth_warnings(SERVICE_OPTIONS *);
+#ifndef WITH_WOLFSSL
 NOEXPORT int crl_init(SERVICE_OPTIONS *section);
 NOEXPORT int load_file_lookup(X509_STORE *, char *);
 NOEXPORT int add_dir_lookup(X509_STORE *, char *);
+#endif /*WITH_WOLFSSL*/
 
 /* verify callback */
 NOEXPORT int verify_callback(int, X509_STORE_CTX *);
 NOEXPORT int verify_checks(CLI *, int, X509_STORE_CTX *);
 NOEXPORT int cert_check(CLI *, X509_STORE_CTX *, int);
-#if OPENSSL_VERSION_NUMBER>=0x10002000L
+#if OPENSSL_VERSION_NUMBER>=0x10002000L || defined(WITH_WOLFSSL)
 NOEXPORT int cert_check_subject(CLI *, X509_STORE_CTX *);
 #endif /* OPENSSL_VERSION_NUMBER>=0x10002000L */
 NOEXPORT int cert_check_local(X509_STORE_CTX *);
 NOEXPORT int compare_pubkeys(X509 *, X509 *);
-#ifndef OPENSSL_NO_OCSP
+#if !defined(OPENSSL_NO_OCSP) && !defined(WITH_WOLFSSL)
 NOEXPORT int ocsp_check(CLI *, X509_STORE_CTX *);
 NOEXPORT int ocsp_request(CLI *, X509_STORE_CTX *, OCSP_CERTID *, char *);
 NOEXPORT OCSP_RESPONSE *ocsp_get_response(CLI *, OCSP_REQUEST *, char *);
-#endif
+#endif /*!defined(OPENSSL_NO_OCSP) && !defined(WITH_WOLFSSL) */
 
 /* utility functions */
-#ifndef OPENSSL_NO_OCSP
+#if !defined(OPENSSL_NO_OCSP) && !defined(WITH_WOLFSSL)
 NOEXPORT X509 *get_current_issuer(X509_STORE_CTX *);
-NOEXPORT void log_time(const int, const char *, ASN1_TIME *);
 #endif
+#ifndef WITH_WOLFSSL
+NOEXPORT void log_time(const int, const char *, ASN1_TIME *);
+#endif /* !defined(WITH_WOLFSSL) */
 
 /**************************************** verify initialization */
 
@@ -85,9 +89,69 @@ int verify_init(SERVICE_OPTIONS *section) {
         set_client_CA_list(section); /* only performed on the server */
 
     /* CRL initialization */
-    if(section->crl_file || section->crl_dir)
+    if(section->crl_file || section->crl_dir) {
+#ifdef WITH_WOLFSSL
+        /* WOLFSSL handles CRL internally, no need to deal with lookups */
+        if(wolfSSL_CTX_EnableCRL(section->ctx, WOLFSSL_CRL_CHECKALL)
+                                                        != SSL_SUCCESS) {
+            sslerror("SSL_CTX_EnableCRL");
+            return 1; /* FAILED */
+        }
+        if (section->crl_file) {
+            if (wolfSSL_CTX_LoadCRLFile(section->ctx, section->crl_file,
+                      SSL_FILETYPE_PEM) != SSL_SUCCESS)
+            {
+                sslerror("SSL_CTX_LoadCRL");
+                return 1; /* FAILED */
+            }
+        }
+        if(section->crl_dir) {
+            if (wolfSSL_CTX_LoadCRL(section->ctx, section->crl_dir,
+                      SSL_FILETYPE_PEM, 0) != SSL_SUCCESS)
+            {
+                sslerror("SSL_CTX_LoadCRL");
+                return 1; /* FAILED */
+            }
+        }
+#else
         if(crl_init(section))
             return 1; /* FAILED */
+#endif /*WITH_WOLFSSL*/
+    }
+
+#ifdef WITH_WOLFSSL
+    if(section->ocsp_url)
+    {
+        if(wolfSSL_CTX_SetOCSP_OverrideURL(section->ctx, section->ocsp_url)
+                != SSL_SUCCESS) {
+            s_log(LOG_ERR, "Error setting OCSP Override URL to: %s)",
+                    section->ocsp_url);
+            sslerror("wolfSSL_CTX_SetOCSP_OverrideURL");
+            return 1; /* FAILED */
+        }
+        if(wolfSSL_CTX_EnableOCSP(section->ctx,
+                WOLFSSL_OCSP_URL_OVERRIDE) != SSL_SUCCESS) {
+            s_log(LOG_ERR, "Error enabling OCSP");
+            sslerror("wolfSSL_CTX_EnableOCSP");
+            return 1; /* FAILED */
+        }
+        s_log(LOG_DEBUG, "Enabled OCSP at URL: %s", section->ocsp_url);
+    }
+    if(section->option.aia==1)
+    {
+        if(section->ocsp_url) {
+            s_log(LOG_ERR, "Error: Cannot set ocsp lookup url with aia.");
+            s_log(LOG_ERR,"Please choose one. Error enabling OCSP");
+            sslerror("wolfSSL_CTX_EnableOCSP");
+        }
+        if(wolfSSL_CTX_EnableOCSP(section->ctx, 0) != SSL_SUCCESS) {
+            s_log(LOG_ERR, "Error enabling OCSP");
+            sslerror("wolfSSL_CTX_EnableOCSP");
+            return 1; /* FAILED */
+        }
+        s_log(LOG_INFO, "Enabled OCSP with aia extension.");
+    }
+#endif /* ifdef WITH_WOLFSSL */
 
     /* verify callback setup */
     if(section->option.request_cert) {
@@ -111,6 +175,7 @@ NOEXPORT void set_client_CA_list(SERVICE_OPTIONS *section) {
     print_client_CA_list(ca_dn);
 }
 
+#ifndef WITH_WOLFSSL
 NOEXPORT int crl_init(SERVICE_OPTIONS *section) {
     X509_STORE *store;
 
@@ -164,6 +229,7 @@ NOEXPORT int add_dir_lookup(X509_STORE *store, char *name) {
     s_log(LOG_DEBUG, "Added %s revocation lookup directory", name);
     return 0; /* OK */
 }
+#endif /*WITH_WOLFSSL*/
 
 /* issue warnings on insecure/missing authentication */
 NOEXPORT void auth_warnings(SERVICE_OPTIONS *section) {
@@ -201,7 +267,7 @@ NOEXPORT void auth_warnings(SERVICE_OPTIONS *section) {
 /**************************************** verify callback */
 
 NOEXPORT int verify_callback(int preverify_ok, X509_STORE_CTX *callback_ctx) {
-        /* our verify callback function */
+    /* our verify callback function */
     SSL *ssl;
     CLI *c;
 
@@ -251,14 +317,14 @@ NOEXPORT int verify_checks(CLI *c,
         str_free(subject);
         return 0; /* reject */
     }
-#ifndef OPENSSL_NO_OCSP
+#if !defined(OPENSSL_NO_OCSP) && !defined(WITH_WOLFSSL)
     if((c->opt->ocsp_url || c->opt->option.aia) &&
             !ocsp_check(c, callback_ctx)) {
         s_log(LOG_WARNING, "Rejected by OCSP at depth=%d: %s", depth, subject);
         str_free(subject);
         return 0; /* reject */
     }
-#endif /* !defined(OPENSSL_NO_OCSP) */
+#endif /* !defined(OPENSSL_NO_OCSP) && !defined(WITH_WOLFSSL) */
 
     s_log(depth ? LOG_INFO : LOG_NOTICE,
         "Certificate accepted at depth=%d: %s", depth, subject);
@@ -290,10 +356,10 @@ NOEXPORT int cert_check(CLI *c, X509_STORE_CTX *callback_ctx,
     }
 
     if(depth==0) { /* additional peer certificate checks */
-#if OPENSSL_VERSION_NUMBER>=0x10002000L
+#if OPENSSL_VERSION_NUMBER>=0x10002000L || defined(WITH_WOLFSSL)
         if(!cert_check_subject(c, callback_ctx))
             return 0; /* reject */
-#endif /* OPENSSL_VERSION_NUMBER>=0x10002000L */
+#endif /* OPENSSL_VERSION_NUMBER>=0x10002000L || defined(WITH_WOLFSSL) */
         if(c->opt->option.verify_peer && !cert_check_local(callback_ctx))
             return 0; /* reject */
     }
@@ -301,7 +367,7 @@ NOEXPORT int cert_check(CLI *c, X509_STORE_CTX *callback_ctx,
     return 1; /* accept */
 }
 
-#if OPENSSL_VERSION_NUMBER>=0x10002000L
+#if OPENSSL_VERSION_NUMBER>=0x10002000L  || defined(WITH_WOLFSSL)
 NOEXPORT int cert_check_subject(CLI *c, X509_STORE_CTX *callback_ctx) {
     X509 *cert=X509_STORE_CTX_get_current_cert(callback_ctx);
     NAME_LIST *ptr;
@@ -337,7 +403,7 @@ NOEXPORT int cert_check_subject(CLI *c, X509_STORE_CTX *callback_ctx) {
     s_log(LOG_WARNING, "CERT: Subject checks failed");
     return 0; /* reject */
 }
-#endif /* OPENSSL_VERSION_NUMBER>=0x10002000L */
+#endif /* OPENSSL_VERSION_NUMBER>=0x10002000L || defined(WITH_WOLFSSL) */
 
 #if OPENSSL_VERSION_NUMBER>=0x10000000L
 /* modern implementation for OpenSSL version >= 1.0.0 */
@@ -351,7 +417,7 @@ NOEXPORT int cert_check_local(X509_STORE_CTX *callback_ctx) {
     cert=X509_STORE_CTX_get_current_cert(callback_ctx);
     subject=X509_get_subject_name(cert);
 
-#if OPENSSL_VERSION_NUMBER<0x10100006L
+#if OPENSSL_VERSION_NUMBER<0x10100006L || defined(WITH_WOLFSSL)
 #define X509_STORE_CTX_get1_certs X509_STORE_get1_certs
 #endif
     /* modern API allows retrieving multiple matching certificates */
@@ -403,6 +469,44 @@ NOEXPORT int cert_check_local(X509_STORE_CTX *callback_ctx) {
 #endif /* OPENSSL_VERSION_NUMBER>=0x10000000L */
 
 NOEXPORT int compare_pubkeys(X509 *c1, X509 *c2) {
+#ifdef WITH_WOLFSSL
+    int c1Sz;
+    unsigned char *c1Data;
+    int c2Sz;
+    unsigned char *c2Data;
+    int ret;
+
+    /* First, call wolfSSL_X509_get_pubkey_buffer with NULL buffer, to get 
+     * the required buffer size. */
+    ret = wolfSSL_X509_get_pubkey_buffer(c1, NULL, &c1Sz);
+    if (ret != WOLFSSL_SUCCESS) {
+        return 0; /* reject */
+    }
+    c1Data = (unsigned char*) malloc(c1Sz);
+    
+    ret = wolfSSL_X509_get_pubkey_buffer(c2, NULL, &c2Sz);
+    if (ret != WOLFSSL_SUCCESS) {
+        return 0; /* reject */
+    }
+    c2Data = (unsigned char*) malloc(c2Sz);
+
+    if (c1Data == NULL
+     || c2Data == NULL
+     || wolfSSL_X509_get_pubkey_buffer(c1, c1Data, &c1Sz) != WOLFSSL_SUCCESS
+     || wolfSSL_X509_get_pubkey_buffer(c2, c2Data, &c2Sz) != WOLFSSL_SUCCESS
+     || c1Sz != c2Sz || safe_memcmp(c1Data, c2Data, (size_t)c1Sz)) {
+        ret = 0; /* reject */
+    }
+    else {
+        ret = 1; /* accept */
+        s_log(LOG_INFO, "CERT: Locally installed certificate matched");
+    }
+
+    free(c1Data);
+    free(c2Data);
+
+    return ret;
+#else
     ASN1_BIT_STRING *k1=X509_get0_pubkey_bitstr(c1);
     ASN1_BIT_STRING *k2=X509_get0_pubkey_bitstr(c2);
     if(!k1 || !k2 || k1->length!=k2->length || k1->length<0 ||
@@ -410,11 +514,12 @@ NOEXPORT int compare_pubkeys(X509 *c1, X509 *c2) {
         return 0; /* reject */
     s_log(LOG_INFO, "CERT: Locally installed certificate matched");
     return 1; /* accept */
+#endif
 }
 
 /**************************************** OCSP checking */
 
-#ifndef OPENSSL_NO_OCSP
+#if !defined(OPENSSL_NO_OCSP) && !defined(WITH_WOLFSSL)
 
 #ifdef DEFINE_STACK_OF
 /* defined in openssl/safestack.h:
@@ -735,7 +840,7 @@ NOEXPORT void log_time(const int level, const char *txt, ASN1_TIME *t) {
     str_free(cp);
 }
 
-#endif /* !defined(OPENSSL_NO_OCSP) */
+#endif /* !defined(OPENSSL_NO_OCSP)  && !defined(WITH_WOLFSSL) */
 
 void print_client_CA_list(const STACK_OF(X509_NAME) *ca_dn) {
     char *ca_name;
@@ -759,6 +864,15 @@ void print_client_CA_list(const STACK_OF(X509_NAME) *ca_dn) {
 
 char *X509_NAME2text(X509_NAME *name) {
     char *text;
+#ifdef WITH_WOLFSSL
+    int sz;
+    sz=wolfSSL_X509_NAME_get_sz(name);
+    if(sz<=0)
+        return str_dup("Invalid X509_NAME");
+    text=str_alloc((size_t)sz+1); /* one byte for '\0' excape */
+    text=wolfSSL_X509_NAME_oneline(name, text, sz);
+    text[sz]='\0';
+#else
     BIO *bio;
     int n;
 
@@ -777,6 +891,7 @@ char *X509_NAME2text(X509_NAME *name) {
     }
     text[n]='\0';
     BIO_free(bio);
+#endif /* WITH_WOLFSSL */
     return text;
 }
 
