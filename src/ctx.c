@@ -135,7 +135,7 @@ NOEXPORT void sslerror_log(unsigned long, const char *, int, const char *);
 
 /**************************************** initialize section->ctx */
 
-#if OPENSSL_VERSION_NUMBER>=0x10100000L
+#if OPENSSL_VERSION_NUMBER>=0x10100000L && !defined(WITH_WOLFSSL)
 typedef long unsigned SSL_OPTIONS_TYPE;
 #else
 typedef long SSL_OPTIONS_TYPE;
@@ -1734,7 +1734,7 @@ NOEXPORT void info_callback(const SSL *ssl, int where, int ret) {
             SSL_alert_type_string_long(ret),
             SSL_alert_desc_string_long(ret));
     } else if(where==SSL_CB_HANDSHAKE_DONE) {
-        ctx=SSL_get_SSL_CTX(ssl);
+        ctx=SSL_get_SSL_CTX((SSL*)ssl);
         if(c->opt->option.client) {
             s_log(LOG_DEBUG, "%6ld client connect(s) requested",
                 SSL_CTX_sess_connect(ctx));

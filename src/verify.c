@@ -481,13 +481,13 @@ NOEXPORT int compare_pubkeys(X509 *c1, X509 *c2) {
     if (ret != WOLFSSL_SUCCESS) {
         return 0; /* reject */
     }
-    c1Data = (unsigned char*) malloc(c1Sz);
+    c1Data = (unsigned char*) malloc((size_t)c1Sz);
     
     ret = wolfSSL_X509_get_pubkey_buffer(c2, NULL, &c2Sz);
     if (ret != WOLFSSL_SUCCESS) {
         return 0; /* reject */
     }
-    c2Data = (unsigned char*) malloc(c2Sz);
+    c2Data = (unsigned char*) malloc((size_t)c2Sz);
 
     if (c1Data == NULL
      || c2Data == NULL

@@ -333,7 +333,6 @@ static char *stunnel_cipher_list=
 #ifndef OPENSSL_NO_TLS1_3
 static char *stunnel_ciphersuites=
     "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256";
-#endif
 #endif /* TLS 1.3 */
 
 /**************************************** parse commandline parameters */

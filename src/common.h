@@ -433,6 +433,7 @@ extern char *sys_errlist[];
 #include <wolfssl/wolfcrypt/dh.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/openssl/ec.h>
+#include <wolfssl/openssl/pem.h>
 #endif /* defined(WITH_WOLFSSL) */
 
 /**************************************** OpenSSL headers */
