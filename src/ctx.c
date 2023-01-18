@@ -357,7 +357,7 @@ NOEXPORT int servername_cb(SSL *ssl, int *ad, void *arg) {
     (void)arg; /* squash the unused parameter warning */
 
     /* handle trivial cases first */
-    if(!c->opt->servername_list_head) {
+    if(!c || !c->opt->servername_list_head) {
         s_log(LOG_DEBUG, "SNI: no virtual services defined");
         return SSL_TLSEXT_ERR_OK;
     }
@@ -703,7 +703,7 @@ NOEXPORT unsigned psk_client_callback(SSL *ssl, const char *hint,
 
     (void)hint; /* squash the unused parameter warning */
     c=SSL_get_ex_data(ssl, index_ssl_cli);
-    if(!c->opt->psk_selected) {
+    if(!c || !c->opt->psk_selected) {
         s_log(LOG_ERR, "INTERNAL ERROR: No PSK identity selected");
         return 0;
     }
@@ -733,6 +733,10 @@ NOEXPORT unsigned psk_server_callback(SSL *ssl, const char *identity,
     PSK_KEYS *found;
 
     c=SSL_get_ex_data(ssl, index_ssl_cli);
+    if(!c) {
+        s_log(LOG_INFO, "SSL_get_ex_data returned NULL");
+        return 0;
+    }
     found=psk_find(&c->opt->psk_sorted, identity);
     if(!found) {
         s_log(LOG_INFO, "PSK identity not found (session resumption?)");
@@ -1249,7 +1253,7 @@ NOEXPORT int ssl_tlsext_ticket_key_cb(SSL *ssl, unsigned char *key_name,
     s_log(LOG_DEBUG, "Session ticket processing callback");
 
     c=SSL_get_ex_data(ssl, index_ssl_cli);
-    if(!HMAC_Init_ex(hctx, (const unsigned char *)(c->opt->ticket_mac->key_val),
+    if(!c || !HMAC_Init_ex(hctx, (const unsigned char *)(c->opt->ticket_mac->key_val),
         c->opt->ticket_mac->key_len, EVP_sha256(), NULL)) {
         s_log(LOG_ERR, "HMAC_Init_ex failed");
         return -1;
@@ -1297,6 +1301,11 @@ NOEXPORT int sess_new_cb(SSL *ssl, SSL_SESSION *sess) {
 
     s_log(LOG_DEBUG, "New session callback");
     c=SSL_get_ex_data(ssl, index_ssl_cli);
+
+    if (!c) {
+        s_log(LOG_ERR, "SSL_get_ex_data returned NULL");
+        return 0;
+    }
 
     new_chain(c); /* new session -> we may have a new peer certificate chain */
 
@@ -1457,7 +1466,7 @@ NOEXPORT SSL_SESSION *sess_get_cb(SSL *ssl,
     s_log(LOG_DEBUG, "Get session callback");
     *do_copy=0; /* allow the session to be freed automatically */
     c=SSL_get_ex_data(ssl, index_ssl_cli);
-    if(c->opt->option.sessiond)
+    if(c && c->opt->option.sessiond)
         return cache_get(ssl, key, key_len);
     return NULL; /* no session to resume */
 }
@@ -1467,7 +1476,7 @@ NOEXPORT void sess_remove_cb(SSL_CTX *ctx, SSL_SESSION *sess) {
 
     s_log(LOG_DEBUG, "Remove session callback");
     opt=SSL_CTX_get_ex_data(ctx, index_ssl_ctx_opt);
-    if(opt->option.sessiond)
+    if(opt && opt->option.sessiond)
         cache_remove(ctx, sess);
 }
 
@@ -1582,6 +1591,13 @@ NOEXPORT void cache_transfer(SSL_CTX *ctx, const u_char type,
 
     /* retrieve pointer to the section structure of this ctx */
     section=SSL_CTX_get_ex_data(ctx, index_ssl_ctx_opt);
+    if(!section) {
+        s_log(LOG_ERR, "cache_transfer: section is NULL");
+        closesocket(s);
+        str_free(packet);
+        return;
+    }
+
     if(sendto(s, (void *)packet,
 #ifdef USE_WIN32
             (int)

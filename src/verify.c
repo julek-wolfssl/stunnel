@@ -275,7 +275,7 @@ NOEXPORT int verify_callback(int preverify_ok, X509_STORE_CTX *callback_ctx) {
         SSL_get_ex_data_X509_STORE_CTX_idx());
     c=SSL_get_ex_data(ssl, index_ssl_cli);
 
-    if(!c->opt->option.verify_chain && !c->opt->option.verify_peer) {
+    if(!c || (!c->opt->option.verify_chain && !c->opt->option.verify_peer)) {
         s_log(LOG_INFO, "Certificate verification disabled");
         return 1; /* accept */
     }

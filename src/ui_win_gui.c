@@ -197,6 +197,10 @@ int WINAPI WinMain(HINSTANCE this_instance, HINSTANCE prev_instance,
     (void)nCmdShow; /* squash the unused parameter warning */
 
     tls_init(); /* initialize thread-local storage */
+#ifdef WITH_WOLFSSL
+    wolfSSL_Debugging_ON();
+    wolfSSL_SetLoggingCb(wolfSSL_s_log);
+#endif
     ghInst=this_instance;
 
     /* set current working directory and engine path */
