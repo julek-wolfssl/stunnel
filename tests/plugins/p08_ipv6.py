@@ -25,6 +25,9 @@ class IPv6Test(StunnelTest):
     def __init__(self, cfg: Config, logger: logging.Logger):
         super().__init__(cfg, logger)
         self.params.description = '081. Test IPv6 support'
+        self.events.skip = [
+            "Cannot assign requested address"
+        ]
         self.events.failure = [
             "peer did not return a certificate",
             "bad certificate",
@@ -94,5 +97,13 @@ class StunnelClientTest(Plugin):
 
     async def perform_operation(self, cfg: Config, logger: logging.Logger) -> None:
         """Run tests"""
+        try:
+            # check that ipv6 is supported
+            import socket
+            s = socket.socket(family=socket.AF_INET6)
+            s.bind(('::1', 12345))
+            s.close()
+        except OSError:
+            return
         stunnel = IPv6Test(cfg, logger)
         await stunnel.test_stunnel(cfg)

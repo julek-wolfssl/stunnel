@@ -71,6 +71,10 @@ NOEXPORT int main_unix(int argc, char* argv[]) {
         fatal("Could not open /dev/null");
 #endif
     main_init();
+#ifdef WITH_WOLFSSL
+    wolfSSL_Debugging_ON();
+    wolfSSL_SetLoggingCb(wolfSSL_s_log);
+#endif
     configure_status=main_configure(argc>1 ? argv[1] : NULL,
         argc>2 ? argv[2] : NULL);
     switch(configure_status) {

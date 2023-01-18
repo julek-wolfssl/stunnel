@@ -449,26 +449,63 @@ find_ssl_dir() { :
     check_ssl_dir "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-migrator/sdk/MacOSX.sdk/usr"
 }
 
-SSLDIR=""
-AC_MSG_CHECKING([for TLS directory])
-AC_ARG_WITH(ssl,
-[  --with-ssl=DIR          location of installed TLS libraries/include files],
-    [check_ssl_dir "$withval"],
-    [find_ssl_dir]
-)
-if test -z "$SSLDIR"; then
-AC_MSG_RESULT([not found])
-AC_MSG_ERROR([
-Could not find your TLS library installation dir
-Use --with-ssl option to fix this problem
-])
+AC_ARG_ENABLE([wolfssl],
+    [  --enable-wolfssl        Enable stunnel with wolfSSL (default: disabled)],
+    [ ENABLED_WOLFSSL=$enableval ],
+    [ ENABLED_WOLFSSL=$no ])
+
+if test "x$ENABLED_WOLFSSL" = "xyes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWITH_WOLFSSL"
+    SSLDIR="/usr/local"
+    AC_DEFINE([WITH_WOLFSSL], [1],
+    [Define to 1 if you using WOLFSSL header file.])
+fi
+
+AM_CONDITIONAL([WOLFSSL], test "x$ENABLED_WOLFSSL" = "xyes")
+
+AC_ARG_ENABLE([wolfssldebug],
+    [  --enable-wolfssldebug   Enable wolfSSL debugging information (default: disabled)],
+    [ ENABLED_WOLFSSLDEBUG=$enableval ],
+    [ ENABLED_WOLFSSLDEBUG=$no ])
+if test "x$ENABLED_WOLFSSLDEBUG" = "xyes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWITH_WOLFSSL_DEBUG"
+    AC_DEFINE([WOLFSSL_DEBUG_ON], [1],
+    [Define to 1 to enable WOLFSSL debug messages.])
+fi
+
+AM_CONDITIONAL([WOLFSSL_DEBUG_ON], test "x$ENABLED_WOLFSSLDEBUG" = "xyes")
+
+if test "x$ENABLED_WOLFSSL" = "xno"
+then
+    SSLDIR=""
+    AC_MSG_CHECKING([for TLS directory])
+    AC_ARG_WITH(ssl,
+    [  --with-ssl=DIR          location of installed SSL libraries/include files],
+        [check_ssl_dir "$withval"],
+        [find_ssl_dir]
+    )
+    if test -z "$SSLDIR"; then
+    AC_MSG_RESULT([not found])
+    AC_MSG_ERROR([
+    Could not find your TLS library installation dir
+    Use --with-ssl option to fix this problem
+    ]) 
+    fi
 fi
 AC_MSG_RESULT([$SSLDIR])
 AC_SUBST([SSLDIR])
 AC_DEFINE_UNQUOTED([SSLDIR], ["$SSLDIR"], [TLS directory])
 
+if test "x$ENABLED_WOLFSSL" = "xyes"
+then
+valid_CPPFLAGS="$CPPFLAGS"; CPPFLAGS="$CPPFLAGS -I$SSLDIR/include -I$SSLDIR/include/wolfssl"
+valid_LIBS="$LIBS"; LIBS="$LIBS -L$SSLDIR/lib64 -L$SSLDIR/lib -lwolfssl"
+else
 valid_CPPFLAGS="$CPPFLAGS"; CPPFLAGS="$CPPFLAGS -I$SSLDIR/include"
 valid_LIBS="$LIBS"; LIBS="$LIBS -L$SSLDIR/lib64 -L$SSLDIR/lib -lssl -lcrypto"
+fi
 
 AC_CHECK_FUNCS(FIPS_mode_set OSSL_PROVIDER_available)
 if test "x$use_fips" = "xauto"; then

@@ -28,6 +28,7 @@ class FIPSTest(StunnelTest):
         self.params.description = '101. Test FIPS mode'
         self.events.skip = [
             "FIPS provider not available",
+            "FIPS support is not available",
             "fips mode not supported",
             r"FIPS PROVIDER.*could not load the shared library"
         ]

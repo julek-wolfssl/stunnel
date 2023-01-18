@@ -63,7 +63,9 @@ NOEXPORT int matches_wildcard(const char *, const char *);
 /* DH/ECDH */
 #ifndef OPENSSL_NO_DH
 NOEXPORT int dh_init(SERVICE_OPTIONS *);
+#ifndef WITH_WOLFSSL
 NOEXPORT DH *dh_read(char *);
+#endif /* WITH_WOLFSSL  */
 #endif /* OPENSSL_NO_DH */
 #ifndef OPENSSL_NO_ECDH
 NOEXPORT int ecdh_init(SERVICE_OPTIONS *);
@@ -204,7 +206,7 @@ int context_init(SERVICE_OPTIONS *section) { /* init TLS context */
 
     /* ciphers */
     if(section->cipher_list) {
-        s_log(LOG_DEBUG, "Ciphers: %s", section->cipher_list);
+        s_log(LOG_INFO, "Ciphers: %s", section->cipher_list);
         if(!SSL_CTX_set_cipher_list(section->ctx, section->cipher_list)) {
             sslerror("SSL_CTX_set_cipher_list");
             return 1; /* FAILED */
@@ -415,13 +417,22 @@ NOEXPORT int matches_wildcard(const char *servername, const char *pattern) {
 
 #ifndef OPENSSL_NO_DH
 
-#if OPENSSL_VERSION_NUMBER<0x10100000L
+#if(OPENSSL_VERSION_NUMBER<0x10100000L) && !defined(WITH_WOLFSSL)
 NOEXPORT STACK_OF(SSL_CIPHER) *SSL_CTX_get_ciphers(const SSL_CTX *ctx) {
     return ctx->cipher_list;
 }
 #endif
 
 NOEXPORT int dh_init(SERVICE_OPTIONS *section) {
+#ifdef WITH_WOLFSSL
+    s_log(LOG_DEBUG, "DH initialization");
+    if(wolfSSL_CTX_SetTmpDH_file(section->ctx, section->cert,
+               SSL_FILETYPE_ASN1) == SSL_SUCCESS) { /* DH file loading failed */
+        return 0;
+     } else {
+        s_log(LOG_DEBUG, "Error loading DH params from file: %s", section->cert);
+    }
+#else
     DH *dh=NULL;
     int i, n;
     char description[128];
@@ -465,6 +476,8 @@ NOEXPORT int dh_init(SERVICE_OPTIONS *section) {
         DH_free(dh);
         return 0; /* OK */
     }
+#endif /* WITH_WOLFSSL */
+
     CRYPTO_THREAD_read_lock(stunnel_locks[LOCK_DH]);
     SSL_CTX_set_tmp_dh(section->ctx, dh_params);
     CRYPTO_THREAD_unlock(stunnel_locks[LOCK_DH]);
@@ -474,6 +487,7 @@ NOEXPORT int dh_init(SERVICE_OPTIONS *section) {
     return 0; /* OK */
 }
 
+#ifndef WITH_WOLFSSL
 NOEXPORT DH *dh_read(char *cert) {
     DH *dh;
     BIO *bio;
@@ -498,6 +512,7 @@ NOEXPORT DH *dh_read(char *cert) {
     s_log(LOG_DEBUG, "Using DH parameters from %s", cert);
     return dh;
 }
+#endif /* WITH_WOLFSSL */
 
 #endif /* OPENSSL_NO_DH */
 
@@ -505,7 +520,7 @@ NOEXPORT DH *dh_read(char *cert) {
 
 #ifndef OPENSSL_NO_ECDH
 
-#if OPENSSL_VERSION_NUMBER < 0x10101000L
+#if OPENSSL_VERSION_NUMBER < 0x10101000L && !defined(WITH_WOLFSSL)
 /* simplified version that only supports a single curve */
 NOEXPORT int SSL_CTX_set1_groups_list(SSL_CTX *ctx, char *list) {
     int nid;
@@ -529,9 +544,15 @@ NOEXPORT int SSL_CTX_set1_groups_list(SSL_CTX *ctx, char *list) {
     EC_KEY_free(ecdh);
     return 1; /* OK */
 }
-#endif /* OpenSSL version < 1.1.1 */
+#endif /* OPENSSL_VERSION_NUMBER < 0x10101000L && !defined(WITH_WOLFSSL)  */
 
 NOEXPORT int ecdh_init(SERVICE_OPTIONS *section) {
+#ifdef WITH_WOLFSSL
+    /* wolfSSL automatically detects ecdh parameters from ECC key file.
+     * No need to load explicitly */
+    (void)section;
+    return 0;
+#else
     s_log(LOG_DEBUG, "ECDH initialization");
     if(!SSL_CTX_set1_groups_list(section->ctx, section->curves)) {
         s_log(LOG_ERR, "Invalid groups list in 'curves'");
@@ -539,6 +560,7 @@ NOEXPORT int ecdh_init(SERVICE_OPTIONS *section) {
     }
     s_log(LOG_DEBUG, "ECDH initialized with curves %s", section->curves);
     return 0; /* OK */
+#endif /* WITH_WOLFSSL */
 }
 
 #endif /* OPENSSL_NO_ECDH */
@@ -1000,6 +1022,10 @@ NOEXPORT void set_prompt(const char *name) {
 }
 
 NOEXPORT int ui_retry() {
+#ifdef WITH_WOLFSSL
+    /* WOLFSSL does not support ERR_peek_error */
+    return 0;
+#else
     unsigned long err=ERR_peek_error();
 
     switch(ERR_GET_LIB(err)) {
@@ -1086,6 +1112,7 @@ NOEXPORT int ui_retry() {
         s_log(LOG_ERR, "Unhandled error library: %d", ERR_GET_LIB(err));
         return 0;
     }
+#endif /* WITH_WOLFSSL */
 }
 
 /**************************************** session tickets */
@@ -1216,7 +1243,9 @@ NOEXPORT int ssl_tlsext_ticket_key_cb(SSL *ssl, unsigned char *key_name,
     const EVP_CIPHER *cipher;
     int iv_len;
 
+#ifndef WITH_WOLFSSL
     (void)key_name; /* squash the unused parameter warning */
+#endif
     s_log(LOG_DEBUG, "Session ticket processing callback");
 
     c=SSL_get_ex_data(ssl, index_ssl_cli);
@@ -1241,6 +1270,9 @@ NOEXPORT int ssl_tlsext_ticket_key_cb(SSL *ssl, unsigned char *key_name,
             s_log(LOG_ERR, "EVP_EncryptInit_ex failed");
             return -1;
         }
+#ifdef WITH_WOLFSSL
+        XMEMCPY(key_name, "stunnel ticket", sizeof("stunnel ticket"));
+#endif
     } else /* retrieve session */
         if(!EVP_DecryptInit_ex(ctx, cipher, NULL,
             (const unsigned char *)(c->opt->ticket_key->key_val), iv)) {
@@ -1300,6 +1332,46 @@ void print_session_id(SSL_SESSION *sess) {
 }
 
 NOEXPORT void new_chain(CLI *c) {
+#ifdef WITH_WOLFSSL
+    char* chain;
+    WOLFSSL_X509_CHAIN* certChain;
+    int i, certSz, idx, size;
+
+    if(c->opt->chain) /* already cached */
+        return; /* this race condition is safe to ignore */
+
+    certChain = wolfSSL_get_peer_chain(c->ssl);
+    if(!certChain || wolfSSL_get_chain_count(certChain) == 0) {
+        s_log(LOG_INFO, "No peer certificate received");
+        return;
+    }
+
+    for(size=0, i=0; i < wolfSSL_get_chain_count(certChain); ++i) {
+        if(wolfSSL_get_chain_cert_pem(certChain, i, NULL, 0, &certSz)
+                != LENGTH_ONLY_E) {
+            s_log(LOG_ERR, "Unable to cache peer cert");
+            return;
+        }
+        size+=certSz;
+    }
+
+    chain=str_alloc_detached((size_t)size+1); /* +1 for '\0' */
+
+    idx = 0;
+    for(i=0; i <wolfSSL_get_chain_count(certChain); ++i) {
+        if(wolfSSL_get_chain_cert_pem(certChain, i, (unsigned char*)chain+idx,
+                   size-idx, &certSz) != SSL_SUCCESS){
+            s_log(LOG_ERR, "Unable to cache peer cert");
+            str_free(chain);
+            return;
+        }
+        idx+=certSz;
+    }
+    chain[size]='\0';
+    c->opt->chain=chain; /* this race condition is safe to ignore */
+    ui_new_chain(c->opt->section_number);
+    s_log(LOG_DEBUG, "Peer certificate was cached (%d bytes)", size);
+#else
     BIO *bio;
     int i, len;
     X509 *peer_cert;
@@ -1343,6 +1415,7 @@ NOEXPORT void new_chain(CLI *c) {
     c->opt->chain=chain; /* this race condition is safe to ignore */
     ui_new_chain(c->opt->section_number);
     s_log(LOG_DEBUG, "Peer certificate was cached (%d bytes)", len);
+#endif /* ifdef WITH_WOLFSSL */
 }
 
 /* cache client sessions */
@@ -1591,6 +1664,7 @@ NOEXPORT void info_callback(const SSL *ssl, int where, int ret) {
         s_log(LOG_DEBUG, "state = %x", state);
 #endif
 
+#ifndef WITH_WOLFSSL /* wolfSSL doesn't support get_state */
         /* log the client certificate request (if received) */
 #ifndef SSL3_ST_CR_CERT_REQ_A
         if(state==TLS_ST_CR_CERT_REQ)
@@ -1605,6 +1679,7 @@ NOEXPORT void info_callback(const SSL *ssl, int where, int ret) {
 #endif
             if(!SSL_get_client_CA_list(ssl))
                 s_log(LOG_INFO, "Client certificate not requested");
+#endif /* WITH_WOLFSSL */
 
         /* prevent renegotiation DoS attack */
         if((where&SSL_CB_HANDSHAKE_DONE)

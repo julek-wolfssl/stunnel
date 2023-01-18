@@ -254,6 +254,13 @@ void log_flush(LOG_MODE new_mode) {
     CRYPTO_THREAD_unlock(stunnel_locks[LOCK_LOG_MODE]);
 }
 
+#ifdef WITH_WOLFSSL
+void wolfSSL_s_log(const int level, const char *const format)
+{
+    s_log(level+3, "wolfSSL Logs: %s", format);
+}
+#endif
+
 NOEXPORT void log_raw(SERVICE_OPTIONS *opt,
         int level, char *stamp, char *id, char *text) {
     char *line;

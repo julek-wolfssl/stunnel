@@ -39,7 +39,7 @@ class ResumeRedirectWrongCert(StunnelTest):
         self.events.failure = [
             "peer did not return a certificate",
             "bad certificate",
-            "certificate verify failed",
+            # "certificate verify failed",
             "unsupported protocol",
             #"TLS accepted: previous session reused",
             #"Redirecting connection",

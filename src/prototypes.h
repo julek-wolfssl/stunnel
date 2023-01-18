@@ -238,7 +238,7 @@ typedef struct service_options_struct {
     char *ocsp_url;
     unsigned long ocsp_flags;
 #endif /* !defined(OPENSSL_NO_OCSP) */
-#if OPENSSL_VERSION_NUMBER>=0x10002000L
+#if OPENSSL_VERSION_NUMBER>=0x10002000L || defined(WITH_WOLFSSL)
     NAME_LIST *check_host, *check_email, *check_ip;   /* cert subject checks */
     NAME_LIST *config;                               /* OpenSSL CONF options */
 #endif /* OPENSSL_VERSION_NUMBER>=0x10002000L */
@@ -530,6 +530,11 @@ void s_log(int, const char *, ...)
 #else
     ;
 #endif
+
+#ifdef WITH_WOLFSSL
+void wolfSSL_s_log(int , const char *);
+#endif
+
 void s_vlog(int, const char *, va_list);
 char *log_id(CLI *);
 void fatal_debug(const char *, const char *, int) NORETURN;
@@ -727,7 +732,9 @@ int getnameinfo(const struct sockaddr *, socklen_t,
 extern CLI *thread_head;
 #endif
 
-#if OPENSSL_VERSION_NUMBER<0x10100004L
+#ifdef WITH_WOLFSSL
+typedef wolfSSL_Mutex CRYPTO_RWLOCK;
+#elif OPENSSL_VERSION_NUMBER<0x10100004L
 
 #ifdef USE_OS_THREADS
 
@@ -779,12 +786,14 @@ typedef enum {
 extern CRYPTO_RWLOCK *stunnel_locks[STUNNEL_LOCKS];
 
 #if OPENSSL_VERSION_NUMBER<0x10100004L
+#ifndef WITH_WOLFSSL
 /* Emulate the OpenSSL 1.1 locking API for older OpenSSL versions */
 CRYPTO_RWLOCK *CRYPTO_THREAD_lock_new(void);
 int CRYPTO_THREAD_read_lock(CRYPTO_RWLOCK *);
 int CRYPTO_THREAD_write_lock(CRYPTO_RWLOCK *);
 int CRYPTO_THREAD_unlock(CRYPTO_RWLOCK *);
 void CRYPTO_THREAD_lock_free(CRYPTO_RWLOCK *);
+#endif /* WITH_WOLFSSL */
 int CRYPTO_atomic_add(int *, int, int *, CRYPTO_RWLOCK *);
 #endif
 

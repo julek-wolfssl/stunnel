@@ -74,6 +74,10 @@ int main(int argc, char *argv[]) {
         return 1;
     resolver_init();
     main_init();
+#ifdef WITH_WOLFSSL
+    wolfSSL_Debugging_ON();
+    wolfSSL_SetLoggingCb(wolfSSL_s_log);
+#endif
     if(!main_configure(argc>1 ? argv[1] : NULL, argc>2 ? argv[2] : NULL))
         daemon_loop();
     main_cleanup();

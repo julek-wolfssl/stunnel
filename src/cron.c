@@ -52,7 +52,7 @@ NOEXPORT unsigned __stdcall cron_thread(void *arg);
 #ifdef USE_OS_THREADS
 NOEXPORT void cron_worker(void);
 #ifndef OPENSSL_NO_DH
-#if OPENSSL_VERSION_NUMBER>=0x0090800fL
+#if OPENSSL_VERSION_NUMBER>=0x0090800fL && !defined(WITH_WOLFSSL)
 NOEXPORT void cron_dh_param(BN_GENCB *);
 NOEXPORT BN_GENCB *cron_bn_gencb(void);
 NOEXPORT int bn_callback(int, int, BN_GENCB *);
@@ -141,19 +141,19 @@ int cron_init() {
 NOEXPORT void cron_worker(void) {
     time_t now, then;
     int delay;
-#if !defined(OPENSSL_NO_DH) && OPENSSL_VERSION_NUMBER>=0x0090800fL
+#if !defined(OPENSSL_NO_DH) && OPENSSL_VERSION_NUMBER>=0x0090800fL && !defined(WITH_WOLFSSL)
     BN_GENCB *bn_gencb;
 #endif
 
     s_log(LOG_DEBUG, "Cron thread initialized");
-#if !defined(OPENSSL_NO_DH) && OPENSSL_VERSION_NUMBER>=0x0090800fL
+#if !defined(OPENSSL_NO_DH) && OPENSSL_VERSION_NUMBER>=0x0090800fL && !defined(WITH_WOLFSSL)
     bn_gencb=cron_bn_gencb();
 #endif
     time(&then);
     for(;;) {
         s_log(LOG_INFO, "Executing cron jobs");
 #ifndef OPENSSL_NO_DH
-#if OPENSSL_VERSION_NUMBER>=0x0090800fL
+#if OPENSSL_VERSION_NUMBER>=0x0090800fL && !defined(WITH_WOLFSSL)
         cron_dh_param(bn_gencb);
 #else /* OpenSSL older than 0.9.8 */
         cron_dh_param();
@@ -182,7 +182,7 @@ NOEXPORT void cron_worker(void) {
 
 #ifndef OPENSSL_NO_DH
 
-#if OPENSSL_VERSION_NUMBER>=0x0090800fL
+#if OPENSSL_VERSION_NUMBER>=0x0090800fL && !defined(WITH_WOLFSSL)
 NOEXPORT void cron_dh_param(BN_GENCB *bn_gencb) {
 #else /* OpenSSL older than 0.9.8 */
 NOEXPORT void cron_dh_param(void) {
@@ -194,7 +194,7 @@ NOEXPORT void cron_dh_param(void) {
         return;
 
     s_log(LOG_NOTICE, "Updating DH parameters");
-#if OPENSSL_VERSION_NUMBER>=0x0090800fL
+#if OPENSSL_VERSION_NUMBER>=0x0090800fL && !defined(WITH_WOLFSSL)
     /* generate 2048-bit DH parameters */
     dh=DH_new();
     if(!dh) {
@@ -229,7 +229,7 @@ NOEXPORT void cron_dh_param(void) {
     s_log(LOG_NOTICE, "DH parameters updated");
 }
 
-#if OPENSSL_VERSION_NUMBER>=0x0090800fL
+#if OPENSSL_VERSION_NUMBER>=0x0090800fL && !defined(WITH_WOLFSSL)
 
 NOEXPORT BN_GENCB *cron_bn_gencb(void) {
 #if OPENSSL_VERSION_NUMBER>=0x10100000L
