@@ -4,6 +4,7 @@ import dataclasses
 import inspect
 import os
 import pkgutil
+import time
 
 
 @dataclasses.dataclass(frozen=True)
@@ -83,6 +84,9 @@ class PluginCollection():
             )
         )
         for plugin in self.plugins:
+            if self.cfg.plugin is not None and plugin.__module__.replace('plugins.', '') != self.cfg.plugin:
+                time.sleep(0.1)
+                continue
             await self.cfg.mainq.put(LogEvent(etype="log", level=20, log=""))
             await self.cfg.mainq.put(
                 LogEvent(

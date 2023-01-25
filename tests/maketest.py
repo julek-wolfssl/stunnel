@@ -175,6 +175,7 @@ class Config(NamedTuple):
     results: pathlib.Path
     summary: pathlib.Path
     debug: int
+    plugin: str
 
 
 class TestConnections(NamedTuple):
@@ -1619,6 +1620,13 @@ def parse_args() -> Config:
         help="the logging level "
         "(default: INFO)",
     )
+    parser.add_argument(
+        "--plugin",
+        type=str,
+        default=None,
+        help="the plugin to run "
+        "(default: All)",
+    )
     args = parser.parse_args()
     utf8_env = dict(os.environ)
     utf8_env.update({
@@ -1646,7 +1654,8 @@ def parse_args() -> Config:
             utf8_env=utf8_env,
             results=os.path.join(args.logs, "results.log"),
             summary=os.path.join(args.logs, "summary.log"),
-            debug=args.debug
+            debug=args.debug,
+            plugin=args.plugin,
         )
 
 
